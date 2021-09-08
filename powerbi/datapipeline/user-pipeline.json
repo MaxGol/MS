@@ -1,0 +1,159 @@
+{
+  "objects": [
+    {
+      "*password": "#{*myRDSPassword}",
+      "name": "rds_mysql",
+      "jdbcProperties": "allowMultiQueries=true",
+      "id": "rds_mysql",
+      "type": "RdsDatabase",
+      "rdsInstanceId": "#{myRDSInstanceId}",
+      "username": "#{myRDSUsername}"
+    },
+    {
+      "output": {
+        "ref": "DestinationRDSTable"
+      },
+      "input": {
+        "ref": "S3InputDataLocation"
+      },
+      "dependsOn": {
+        "ref": "RdsMySqlTableCreateActivity"
+      },
+      "name": "DataLoadActivity",
+      "id": "DataLoadActivity",
+      "runsOn": {
+        "ref": "Ec2Instance"
+      },
+      "type": "CopyActivity"
+    },
+    {
+      "database": {
+        "ref": "rds_mysql"
+      },
+      "name": "RdsMySqlTableCreateActivity",
+      "runsOn": {
+        "ref": "Ec2Instance"
+      },
+      "id": "RdsMySqlTableCreateActivity",
+      "type": "SqlActivity",
+      "script": "#{myRDSCreateTableSql}"
+    },
+    {
+      "instanceType": "t1.micro",
+      "name": "Ec2Instance",
+      "actionOnTaskFailure": "terminate",
+      "securityGroups": "#{myEc2RdsSecurityGrps}",
+      "id": "Ec2Instance",
+      "type": "Ec2Resource",
+      "terminateAfter": "2 Hours"
+    },
+    {
+      "name": "DataFormat1",
+      "id": "DataFormat1",
+      "type": "CSV"
+    },
+    {
+      "occurrences": "1",
+      "period": "1 days",
+      "name": "RunOnce",
+      "id": "DefaultSchedule",
+      "type": "Schedule",
+      "startDateTime": "2020-05-05T02:00:00"
+    },
+    {
+      "failureAndRerunMode": "CASCADE",
+      "schedule": {
+        "ref": "DefaultSchedule"
+      },
+      "resourceRole": "DataPipelineDefaultResourceRole",
+      "role": "DataPipelineDefaultRole",
+      "pipelineLogUri": "s3://smas-prod-data-export-for-pipeline/logs/",
+      "scheduleType": "cron",
+      "name": "Default",
+      "id": "Default"
+    },
+    {
+      "database": {
+        "ref": "rds_mysql"
+      },
+      "name": "DestinationRDSTable",
+      "insertQuery": "#{myRDSTableInsertSql}",
+      "id": "DestinationRDSTable",
+      "type": "SqlDataNode",
+      "table": "#{myRDSTableName}",
+      "selectQuery": "select * from #{table}"
+    },
+    {
+      "directoryPath": "#{myInputS3Loc}",
+      "dataFormat": {
+        "ref": "DataFormat1"
+      },
+      "name": "S3InputDataLocation",
+      "id": "S3InputDataLocation",
+      "type": "S3DataNode"
+    }
+  ],
+  "parameters": [
+    {
+      "description": "RDS MySQL password",
+      "id": "*myRDSPassword",
+      "type": "String"
+    },
+    {
+      "watermark": "security group name",
+      "helpText": "The names of one or more EC2 security groups that have access to the RDS MySQL cluster.",
+      "description": "RDS MySQL security group(s)",
+      "isArray": "true",
+      "optional": "true",
+      "id": "myEc2RdsSecurityGrps",
+      "type": "String"
+    },
+    {
+      "description": "RDS MySQL username",
+      "id": "myRDSUsername",
+      "type": "String"
+    },
+    {
+      "description": "Input S3 file path",
+      "id": "myInputS3Loc",
+      "type": "AWS::S3::ObjectKey"
+    },
+    {
+      "helpText": "The SQL statement to insert data into the RDS MySQL table.",
+      "watermark": "INSERT INTO #{table} (col1, col2, col3) VALUES(?, ?, ?) ;",
+      "description": "Insert SQL query",
+      "id": "myRDSTableInsertSql",
+      "type": "String"
+    },
+    {
+      "helpText": "The name of an existing table or a new table that will be created based on the create table SQL query parameter below.",
+      "description": "RDS MySQL table name",
+      "id": "myRDSTableName",
+      "type": "String"
+    },
+    {
+      "watermark": "CREATE TABLE pet IF NOT EXISTS (name VARCHAR(20), owner VARCHAR(20), species VARCHAR(20), gender CHAR(1), birth DATE, death DATE);",
+      "helpText": "The idempotent SQL statement to create the RDS MySQL table if it does not already exist.",
+      "description": "Create table SQL query",
+      "optional": "true",
+      "id": "myRDSCreateTableSql",
+      "type": "String"
+    },
+    {
+      "watermark": "DB Instance",
+      "description": "RDS Instance ID",
+      "id": "myRDSInstanceId",
+      "type": "String"
+    }
+  ],
+  "values": {
+    "myRDSInstanceId": "smas-powerbi",
+    "myRDSUsername": "admin",
+    "myRDSTableInsertSql": "INSERT INTO users (guid, title, first_name, last_name, email, address_line_1, address_line_2, address_country, address_city, address_county, address_postcode, address_state, created, verified, is_adult, additional_samples, offers_and_promotions, share_data_with_third_party, has_been_given_mature_content_warning, terms_conditions, alcohol, foodDrink, healthBeauty, household, newsMagazines, petcare, dob)\nVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\nON DUPLICATE KEY UPDATE\ntitle=VALUES(title),\nfirst_name=VALUES(first_name),\nlast_name=VALUES(last_name),\nemail=VALUES(email),\naddress_line_1=VALUES(address_line_1),\naddress_line_2=VALUES(address_line_2),\naddress_country=VALUES(address_country),\naddress_city=VALUES(address_city),\naddress_county=VALUES(address_county),\naddress_postcode=VALUES(address_postcode),\naddress_state=VALUES(address_state),\ncreated=VALUES(created),\nverified=VALUES(verified),\nis_adult=VALUES(is_adult),\nadditional_samples=VALUES(additional_samples),\noffers_and_promotions=VALUES(offers_and_promotions),\nshare_data_with_third_party=VALUES(share_data_with_third_party),\nhas_been_given_mature_content_warning=VALUES(has_been_given_mature_content_warning),\nterms_conditions=VALUES(terms_conditions),\nalcohol=VALUES(alcohol),\nfoodDrink=VALUES(foodDrink),\nhealthBeauty=VALUES(healthBeauty),\nhousehold=VALUES(household),\nnewsMagazines=VALUES(newsMagazines),\npetcare=VALUES(petcare),\ndob=VALUES(dob)",
+    "*myRDSPassword": "tITanETIngrA",
+    "myEc2RdsSecurityGrps": "smas-powerbi",
+    "myRDSCreateTableSql": "CREATE TABLE IF NOT EXISTS users (\n  guid VARCHAR(255) NOT NULL PRIMARY KEY,\n  title VARCHAR(255),\n  first_name VARCHAR(255),\n  last_name VARCHAR(255),\n  email VARCHAR(255),\n  address_line_1 VARCHAR(255),\n  address_line_2 VARCHAR(255),\n  address_country VARCHAR(255),\n  address_city VARCHAR(255),\n  address_county VARCHAR(255),\n  address_postcode VARCHAR(255),\n  address_state VARCHAR(255),\n  created VARCHAR(255),\n  verified VARCHAR(255),\n  is_adult VARCHAR(255),\n  additional_samples VARCHAR(255),\n  offers_and_promotions VARCHAR(255),\n  share_data_with_third_party VARCHAR(255),\n  has_been_given_mature_content_warning VARCHAR(255),\n  terms_conditions VARCHAR(255),\n  alcohol VARCHAR(255),\n  foodDrink VARCHAR(255),\n  healthBeauty VARCHAR(255),\n  household VARCHAR(255),\n  newsMagazines VARCHAR(255),\n  petcare VARCHAR(255),\n  dob VARCHAR(255)\n)",
+    "myRDSTableName": "users",
+    "myInputS3Loc": "s3://smas-prod-data-export-for-pipeline/users.csv"
+  }
+}
